@@ -1,9 +1,8 @@
 # Seeed Contest
 
 ### 1.Update
-
-- 9.14-16 (Yiyang): 添加 VR teleop code, orin端torch, torchvision, realsense手动编译脚本
-
+- 9.16 : 添加orin端torch, torchvision, realsense手动编译脚本 (Yiyang)
+- 9.14 : 添加 VR teleop code (Yiyang)
 ### 2.Task List
 
 [任务列表](https://docs.qq.com/doc/DTFN6WUtBZ3NGaG1Z?isNewEmptyDoc=1&electronTabTitle=%E7%A9%BA%E7%99%BD%E6%96%87%E6%A1%A3&no_promotion=1&nlc=1)
