@@ -65,7 +65,6 @@
             self.bus2.write(
                 "Max_Torque_Limit", name, 500
             )  # 50% of the max torque limit to avoid burnout
-```
         
         for name in self.base_motors:
             self.bus2.write("Operating_Mode", name, OperatingMode.VELOCITY.value)
@@ -73,3 +72,7 @@
         
         self.bus1.enable_torque()
         self.bus2.enable_torque()
+```
+
+Make the four wheels fully touched the ground, adapt it with the 3D printer.
+
