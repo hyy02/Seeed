@@ -63,8 +63,8 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 # 定义状态枚举
 class RobotState(Enum):
     NAVIGATION = auto()    # 导航状态
-    OPTIMIZATION = auto()  # 优化状态  
     OPERATION = auto()     # 操作状态
+    END = auto()           # 结束状态
 
 GLOBAL_BACK_GOAL = np.array([-99.1578, -67.1670, 21.1723, 99.1829, 5.7592, 0.8043, 99.8230, -67.0739, 21.0242, 99.1322, -0.6326, 0.4778])
 GLOBAL_OPEN_GOAL = np.array([-99.1578, -67.1670, 21.1723, 99.1829, 5.7592, 36, 99.8230, -67.0739, 21.0242, 99.1322, -0.6326, 36])
@@ -172,13 +172,15 @@ def queue_reset_actions(action_queue, robot, target_position, steps=50, start_po
 
 
 class StateMachine:
-    """状态机管理机器人的三个状态：导航、优化、操作"""
+    """状态机管理机器人的三个状态：导航、操作、结束"""
     
     def __init__(self, initial_state=RobotState.NAVIGATION, state_check_interval=300):
         self.current_state = initial_state
         self.state_check_interval = state_check_interval
         self.step_count = 0
         self.state_transition_log = []
+        self.operation_count = 0  # 记录进入操作状态的次数
+        self.max_operation_cycles = 3  # 最大操作循环次数
         
     def update(self, observation, action_queue, robot, teleop):
         """更新状态机，每state_check_interval步检查状态转换"""
@@ -194,22 +196,28 @@ class StateMachine:
     
     def _evaluate_state_transition(self, observation, action_queue, robot, teleop):
         """评估状态转换条件"""
-        # 这里可以根据观测数据、动作队列状态等来决定状态转换
         
         if self.current_state == RobotState.NAVIGATION:
-            # 导航状态转换条件：如果动作队列为空且机器人处于稳定位置，转到优化状态
+            # 导航状态转换条件：如果动作队列为空且机器人处于稳定位置，转到操作状态
             if len(action_queue) == 0 and self._is_robot_stable(observation):
-                return RobotState.OPTIMIZATION
-                
-        elif self.current_state == RobotState.OPTIMIZATION:
-            # 优化状态转换条件：如果优化完成，转到操作状态
-            if self._is_optimization_complete(observation):
                 return RobotState.OPERATION
                 
         elif self.current_state == RobotState.OPERATION:
-            # 操作状态转换条件：如果操作完成或需要重新导航，转回导航状态
-            if self._is_operation_complete(observation) or self._needs_renavigation(observation):
-                return RobotState.NAVIGATION
+            # 操作状态转换条件：如果操作完成，转回导航状态或结束状态
+            if self._is_operation_complete(observation):
+                self.operation_count += 1
+                logging.info(f"操作完成，第 {self.operation_count} 次操作循环")
+                
+                # 如果达到最大操作循环次数，转到结束状态
+                if self.operation_count >= self.max_operation_cycles:
+                    return RobotState.END
+                else:
+                    # 否则转回导航状态进行下一次操作
+                    return RobotState.NAVIGATION
+                    
+        elif self.current_state == RobotState.END:
+            # 结束状态不进行转换
+            return RobotState.END
                 
         return self.current_state  # 保持当前状态
     
@@ -227,25 +235,26 @@ class StateMachine:
         # 执行状态特定的初始化操作
         if new_state == RobotState.NAVIGATION:
             self._enter_navigation_state(robot, teleop)
-        elif new_state == RobotState.OPTIMIZATION:
-            self._enter_optimization_state(robot, teleop)
         elif new_state == RobotState.OPERATION:
             self._enter_operation_state(robot, teleop)
+        elif new_state == RobotState.END:
+            self._enter_end_state(robot, teleop)
     
     def _enter_navigation_state(self, robot, teleop):
         """进入导航状态的初始化操作"""
         logging.info("进入导航状态：机器人将移动到目标位置")
         # 可以在这里添加导航相关的初始化代码
         
-    def _enter_optimization_state(self, robot, teleop):
-        """进入优化状态的初始化操作"""
-        logging.info("进入优化状态：调整机器人姿态和位置")
-        # 可以在这里添加优化相关的初始化代码
-        
     def _enter_operation_state(self, robot, teleop):
         """进入操作状态的初始化操作"""
-        logging.info("进入操作状态：执行具体任务操作")
+        logging.info(f"进入操作状态：执行第 {self.operation_count + 1} 次具体任务操作")
         # 可以在这里添加操作相关的初始化代码
+    
+    def _enter_end_state(self, robot, teleop):
+        """进入结束状态的初始化操作"""
+        logging.info("进入结束状态：完成所有操作任务")
+        log_say("任务完成，所有操作循环已结束")
+        # 可以在这里添加结束相关的清理代码
     
     def _is_robot_stable(self, observation):
         """检查机器人是否处于稳定状态"""
@@ -268,28 +277,6 @@ class StateMachine:
             
         return True  # 默认返回稳定
     
-    def _is_optimization_complete(self, observation):
-        """检查优化是否完成"""
-        # 示例：检查是否达到优化目标位置
-        position_tolerance = 5.0  # 位置容差（度）
-        
-        try:
-            # 从观测数据中提取位置信息
-            positions = []
-            for key in observation.keys():
-                if '.pos' in key and ('arm' in key or 'gripper' in key):
-                    positions.append(observation[key])
-            
-            # 简单的完成条件：所有关节位置都在合理范围内
-            if positions:
-                position_range = max(positions) - min(positions)
-                return position_range < 180  # 示例条件
-                
-        except Exception as e:
-            logging.warning(f"检查优化完成状态时出错: {e}")
-            
-        return True  # 默认返回完成
-    
     def _is_operation_complete(self, observation):
         """检查操作是否完成"""
         # 示例：检查操作任务是否完成
@@ -310,30 +297,13 @@ class StateMachine:
             
         return False  # 默认返回未完成
     
-    def _needs_renavigation(self, observation):
-        """检查是否需要重新导航"""
-        # 示例：检查是否偏离目标位置太远需要重新导航
-        try:
-            # 检查基座位置或关节位置是否偏离目标
-            base_velocities = []
-            for key in observation.keys():
-                if '.vel' in key and ('x' in key or 'y' in key or 'theta' in key):
-                    base_velocities.append(abs(observation[key]))
-            
-            if base_velocities:
-                avg_base_vel = sum(base_velocities) / len(base_velocities)
-                return avg_base_vel > 0.5  # 如果基座移动速度过快，可能需要重新导航
-                
-        except Exception as e:
-            logging.warning(f"检查重新导航需求时出错: {e}")
-            
-        return False  # 默认返回不需要重新导航
-    
     def get_current_state_info(self):
         """获取当前状态信息"""
         return {
             "current_state": self.current_state.name,
             "step_count": self.step_count,
+            "operation_count": self.operation_count,
+            "max_operation_cycles": self.max_operation_cycles,
             "transitions": self.state_transition_log[-5:]  # 最近5次状态转换
         }
 
@@ -443,7 +413,7 @@ def record_loop(
                         so101_leader.SO101Leader,
                         koch_leader.KochLeader,
                     ),
-                )
+                ),
             ),
             None,
         )
@@ -473,6 +443,10 @@ def record_loop(
         current_events = teleop.get_vr_events()
         events.update(current_events)
 
+        # 检查是否到达结束状态，如果是则提前退出
+        if state_machine.current_state == RobotState.END:
+            logging.info("到达结束状态，提前退出录制循环")
+            break
 
         if events["exit_early"]:
             events["exit_early"] = False
@@ -495,6 +469,7 @@ def record_loop(
             # 将状态信息添加到观测数据中
             observation["current_state"] = current_state.value
             observation["state_step_count"] = state_machine.step_count
+            observation["operation_count"] = state_machine.operation_count
 
         if policy is not None or dataset is not None:
             observation_frame = build_dataset_frame(dataset.features, observation, prefix="observation")
@@ -655,6 +630,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 display_data=cfg.display_data,
                 state_machine=state_machine,  # 传递状态机
             )
+
+            # 检查是否到达结束状态
+            if state_machine.current_state == RobotState.END:
+                logging.info("任务完成，提前结束录制")
+                break
 
             # Execute a few seconds without recording to give time to manually reset the environment
             # Skip reset for the last episode to be recorded
