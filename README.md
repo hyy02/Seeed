@@ -13,3 +13,15 @@
 
 - AGX Orin (32G)： IP : `10.147.17.121`, User: `cics` Passwd: `cas-123`
 - 由于jetson本身只有64G, 已加装2T固态硬盘: 路径`/media/cics/EFI1/data`
+
+```
+python /home/cics/Desktop/codes/projects/lerobot/src/lerobot/scripts/lerobot_record.py \
+  --robot.type=xlerobot \
+  --robot.cameras="{ head: {type: intelrealsense, serial_number_or_name: 935422072196, width: 640, height: 480, fps: 30, use_depth: True}, right: {type: opencv, index_or_path: '/dev/video6', width: 640, height: 480, fps: 20}, left: {type: opencv, index_or_path: '/dev/video8', width: 640, height: 480, fps: 20} }" \
+  --dataset.repo_id=YiyangHuang/eval_table \
+  --dataset.single_task="Clear the table." \
+  --dataset.root=/media/cics/T7/datasets/eval_table_act \
+  --display_data=true \
+  --policy.path=/media/cics/T7/checkpoints/pi05_table_pretrained/
+
+```
